@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Notion → PDF 转换器 Pro V3</title>
+
+<!-- Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600&family=JetBrains+Mono:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+<!-- 霞鹜文楷 Lite (CDN) -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-lite-webfont@1.1.0/style.css" />
+
+<!-- highlight.js 用于代码高亮 -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css" id="hljs-css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+
+<!-- marked.js 用于 Markdown 解析 -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
+
+<!-- JSZip 用于解析 Notion 导出的 ZIP 包 -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+<!-- KaTeX 用于 LaTeX 数学公式渲染 -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+
+<!-- CodeMirror 5 用于 Markdown 源码编辑 -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/markdown/markdown.min.js"></script>
+
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  /* 现代化扁平配色与圆角变量 */
+  --text:      #2f2d2a;
+  --text-2:    #787774;
+  --bg:        #ffffff;
+  --bg-2:      #f9f8f6;
+  --bg-3:      #f3f2ef;
+  --border:    #e8e7e4;
+  --callout:   #f1f1ef; /* 标注块默认底色 */
+  --code-bg:   #f6f6f4;
+  --link:      #0369a1;
+  --red:       #c7254e;
+  
+  --radius-sm: 6px;
+  --radius:    8px;
+  --radius-lg: 12px;
+  --shadow-sm: 0 1px 4px rgba(0,0,0,0.04);
+  --shadow:    0 2px 8px rgba(0,0,0,0.06);
+  
+  /* 动态样式变量 */
+  --doc-font-size: 16px;
+  --doc-font-family: 'Noto Serif SC', Georgia, serif;
+}
+
+html, body { height: 100%; overflow: hidden; }
+
+body {
+  font-family: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: var(--bg-3);
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── TOOLBAR ─────────────────────────────── */
+.toolbar {
+  display: flex; align-items: center; gap: 14px;
+  padding: 0 20px; height: 64px;
+  background: var(--bg);
+  box-shadow: var(--shadow-sm); /* 移除 border，使用柔和阴影 */
+  flex-shrink: 0; user-select: none; z-index: 10;
+}
+
+.icon-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 36px; height: 36px; border-radius: var(--radius); border: none;
+  background: transparent; color: var(--text-2);
+  font-size: 18px; cursor: pointer; transition: all 0.2s ease;
+}
+.icon-btn:hover { background: var(--bg-2); color: var(--text); }
+
+.logo {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 16px; font-weight: 600; color: var(--text);
+  letter-spacing: -0.01em;
+}
+.logo-box {
+  width: 28px; height: 28px;
+  background: var(--text); border-radius: var(--radius-sm);
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; font-size: 14px; font-weight: 800;
+}
+.logo-arrow { color: var(--text-2); font-weight: 400; margin: 0 2px; }
+
+.sep { flex: 1; }
+
+/* 右侧操作区组件集 */
+.toolbar-controls {
+  display: flex; align-items: center; gap: 12px;
+}
+
+.control-group {
+  display: flex; align-items: center;
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--radius); overflow: hidden; height: 36px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+}
+.control-group > * { border-right: 1px solid var(--border); }
+.control-group > *:last-child { border-right: none; }
+
+.toolbar-select {
+  height: 100%; border: none; background: transparent;
+  padding: 0 10px 0 14px; font-size: 13px; color: var(--text);
+  font-family: inherit; cursor: pointer; outline: none;
+}
+/* 隐藏原生下拉箭头增加极简感 */
+.toolbar-select { cursor: pointer; }
+
+.font-btn {
+  width: 36px; height: 100%; border: none; background: transparent;
+  font-size: 14px; font-weight: 600; color: var(--text-2); cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.15s;
+}
+.font-btn:hover { background: var(--bg-2); color: var(--text); }
+.font-val {
+  min-width: 46px; text-align: center; font-size: 13px; font-weight: 500;
+  color: var(--text); background: var(--bg-2); 
+  display: inline-flex; align-items: center; justify-content: center; height: 100%;
+}
+
+/* 颜色选择器 */
+.color-picker {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 13px; color: var(--text); padding: 0 12px;
+}
+.color-picker input[type="color"] {
+  width: 22px; height: 22px; padding: 0; border: none; border-radius: 4px;
+  cursor: pointer; background: none;
+}
+.color-picker input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+.color-picker input[type="color"]::-webkit-color-swatch { border: 1px solid rgba(0,0,0,0.1); border-radius: 4px; }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 0 16px; height: 36px;
+  border-radius: var(--radius); border: 1px solid var(--border);
+  background: var(--bg); font-family: inherit; font-size: 13.5px; font-weight: 500;
+  color: var(--text); cursor: pointer; white-space: nowrap;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.02); transition: all .15s ease;
+}
+.btn:hover { background: var(--bg-2); border-color: #d4d3d0; }
+.btn:active { background: var(--bg-3); }
+
+.btn-primary { background: var(--text); color: #fff; border-color: var(--text); }
+.btn-primary:hover { background: #4a4845; border-color: #4a4845; }
+
+/* ── LAYOUT ──────────────────────────────── */
+.main { display: flex; flex: 1; overflow: hidden; gap: 1px; background: var(--border); }
+
+/* ── EDITOR / DROPZONE ───────────────────── */
+.pane-editor {
+  width: 42%; min-width: 320px;
+  display: flex; flex-direction: column;
+  background: var(--bg-2); position: relative;
+  transition: width 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), min-width 0.3s;
+}
+
+.pane-editor.collapsed { width: 0; min-width: 0; border-right: none; }
+
+.pane-editor.drag-over { background: #e8f0fe; }
+.pane-editor.drag-over::after {
+  content: "📂 释放鼠标，解析 ZIP 压缩包";
+  position: absolute; inset: 0;
+  background: rgba(255, 255, 255, 0.85);
+  border: 3px dashed var(--link); border-radius: var(--radius);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; font-weight: 600; color: var(--link); z-index: 100; pointer-events: none;
+}
+
+.pane-label {
+  padding: 12px 18px; font-size: 11px; font-weight: 600; letter-spacing: 0.05em;
+  color: var(--text-2); border-bottom: 1px solid var(--border);
+  background: var(--bg-2); flex-shrink: 0;
+  display: flex; justify-content: space-between; align-items: center;
+  white-space: nowrap; overflow: hidden;
+}
+
+/* CodeMirror 覆盖样式 */
+.CodeMirror {
+  flex: 1; height: auto;
+  font-family: 'JetBrains Mono', monospace; font-size: 13.5px; line-height: 1.7;
+  color: #44413c; background: transparent; padding: 12px;
+}
+.CodeMirror-lines { padding: 10px 0; }
+.CodeMirror pre.CodeMirror-line, .CodeMirror pre.CodeMirror-line-like { padding: 0 10px; }
+
+.char-counter { position: absolute; bottom: 14px; right: 18px; font-size: 11px; color: var(--text-2); pointer-events: none; z-index: 10; opacity: 0.8; }
+.pane-editor.collapsed .char-counter { display: none; }
+
+/* ── PREVIEW ─────────────────────────────── */
+.pane-preview { flex: 1; background: #fff; overflow-y: auto; overflow-x: hidden; position: relative; }
+.preview-page { max-width: 840px; margin: 0 auto; padding: 64px 80px 100px; }
+
+.pane-preview::-webkit-scrollbar { width: 8px; }
+.pane-preview::-webkit-scrollbar-track { background: transparent; }
+.pane-preview::-webkit-scrollbar-thumb { background: #dcdad5; border-radius: 4px; border: 2px solid #fff; }
+
+/* ── EMPTY STATE ─────────────────────────── */
+.empty {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  min-height: 55vh; gap: 18px; color: var(--text-2); text-align: center;
+}
+.empty-icon { font-size: 3.2em; opacity: .25; }
+.empty-text { font-size: 16px; font-weight: 500; color: var(--text); }
+.empty-steps {
+  display: flex; flex-direction: column; gap: 10px; text-align: left;
+  background: var(--bg-2); border-radius: var(--radius-lg); padding: 22px 28px;
+  font-size: 13.5px; color: var(--text-2); line-height: 1.6; border: 1px solid var(--border);
+}
+.empty-steps b { color: var(--text); }
+
+/* ── DOCUMENT CONTENT (NOTION STYLE) ─────── */
+.doc { 
+  font-family: var(--doc-font-family); 
+  font-size: var(--doc-font-size); 
+  line-height: 1.8; color: var(--text); word-break: break-word; 
+  transition: font-size 0.2s;
+}
+.doc h1 { font-size: 2.15em; font-weight: 700; line-height: 1.25; margin: 0 0 0.7em; padding-bottom: 0.35em; border-bottom: 2px solid var(--text); }
+.doc h2 { font-size: 1.5em; font-weight: 600; line-height: 1.3; margin: 2em 0 0.5em; }
+.doc h3 { font-size: 1.2em; font-weight: 600; margin: 1.6em 0 0.4em; }
+.doc p { margin: 0 0 0.8em; }
+.doc p:last-child { margin-bottom: 0; }
+.doc ul, .doc ol { padding-left: 1.5em; margin: 0.2em 0 0.8em; }
+.doc li { margin: 0.25em 0; }
+.doc code { font-family: 'JetBrains Mono', monospace; font-size: 0.85em; background: var(--code-bg); color: var(--red); padding: 0.15em 0.4em; border-radius: 4px; border: 1px solid rgba(0,0,0,.06); }
+
+/* 核心修复：代码块强制自动换行，禁止水平滚动 */
+.doc pre {
+  background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius);
+  margin: 1.2em 0; position: relative;
+  /* 强制折行设置 */
+  white-space: pre-wrap !important; word-break: break-all; overflow-wrap: break-word; 
+}
+.doc pre code {
+  background: none; color: inherit; border: none; border-radius: 0;
+  display: block; padding: 18px 20px; line-height: 1.65;
+  /* 强制折行设置 */
+  white-space: pre-wrap !important; word-break: break-all; overflow-wrap: break-word;
+  overflow-x: visible; /* 禁用内部滚动，由外层自动换行 */
+}
+.code-lang {
+  position: absolute; top: 0; right: 0; padding: 4px 10px;
+  background: var(--border); color: #777; font-family: 'JetBrains Mono', monospace;
+  font-size: 10px; font-weight: 600; text-transform: uppercase; border-bottom-left-radius: var(--radius);
+}
+
+/* 标注块 (Callout) */
+.doc .callout {
+  display: flex; gap: 14px;
+  background: var(--callout); border-radius: var(--radius-lg); padding: 18px 22px; margin: 1.2em 0;
+  break-inside: auto; page-break-inside: auto;
+  transition: all 0.2s ease;
+}
+/* 线框模式 (Outline Mode) 状态支持 */
+.doc.callout-outline-mode .callout {
+  background: transparent !important;
+  border: 1px solid var(--border);
+}
+
+.callout-icon { font-size: 1.3em; flex-shrink: 0; width: 28px; text-align: center; line-height: 1.4; }
+.callout-body { flex: 1; min-width: 0; font-size: 0.95em; }
+.callout-body > *:first-child { margin-top: 0; }
+.callout-body > *:last-child { margin-bottom: 0; }
+
+.doc blockquote { border-left: 3px solid #d4d3d0; padding: 2px 0 2px 18px; margin: 1em 0; color: var(--text-2); }
+
+/* 核心修复：表格字体继承与防截断换行 */
+.doc table { 
+  border-collapse: collapse; width: 100%; margin: 1.4em 0; font-size: 0.9em; 
+  font-family: inherit; /* 修复字体继承 */
+  table-layout: fixed; /* 强制布局，防止单列过宽出界 */
+}
+.doc th, .doc td { 
+  border: 1px solid var(--border); padding: 10px 14px; text-align: left; 
+  word-wrap: break-word; word-break: break-word; white-space: normal; /* 强制内容折行 */
+}
+.doc th { background: var(--bg-2); font-weight: 600; color: var(--text); }
+.doc tr:nth-child(even) td { background: #fafaf8; }
+
+.doc hr { border: none; border-top: 1px solid var(--border); margin: 2.2em 0; }
+.doc a { color: var(--link); text-decoration: none; border-bottom: 1px solid rgba(3,105,161,0.2); transition: border-color 0.15s; }
+.doc a:hover { border-bottom-color: var(--link); }
+.doc img { max-width: 100%; border-radius: var(--radius); margin: 1.2em 0; border: 1px solid var(--border); box-shadow: var(--shadow-sm); }
+
+.katex-display { margin: 1em 0; overflow-x: auto; overflow-y: hidden; padding: 0.5em 0; }
+
+/* ── PRINT ───────────────────────────────── */
+@media print {
+  html, body { height: auto; overflow: visible; background: #fff; }
+  .toolbar, .pane-editor { display: none !important; }
+  .main { background: #fff; gap: 0; display: block; border: none; }
+  .pane-preview { overflow: visible; width: 100%; background: #fff; }
+  .preview-page { max-width: 100%; padding: 0; margin: 0; }
+  @page { size: A4; margin: 2cm 2.2cm; }
+
+  /* 打印样式强制执行 */
+  .doc .callout { background: var(--callout) !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .doc.callout-outline-mode .callout { background: transparent !important; border: 1px solid var(--border) !important; }
+  
+  /* 代码强制折行，禁止截断 */
+  .doc pre { background: var(--bg-2) !important; border-color: var(--border) !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; break-inside: avoid; white-space: pre-wrap !important; word-break: break-all !important; overflow-wrap: break-word !important; }
+  .doc pre code { white-space: pre-wrap !important; word-break: break-all !important; overflow-wrap: break-word !important; }
+  
+  /* 表格防止溢出 */
+  .doc table { table-layout: fixed !important; width: 100% !important; }
+  .doc th, .doc td { word-wrap: break-word !important; word-break: break-word !important; }
+
+  .doc h1, .doc h2, .doc h3 { break-after: avoid; }
+  .doc img { max-height: 800px; object-fit: contain; }
+}
+</style>
+</head>
+<body>
+
+<div class="toolbar">
+  <!-- 侧栏切换开关 -->
+  <button id="btnToggleSidebar" class="icon-btn" title="显示/隐藏侧栏编辑区">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="3" x2="9" y2="21"></line></svg>
+  </button>
+  
+  <div class="logo">
+    <div class="logo-box">N</div>
+    Notion <span class="logo-arrow">→</span> PDF Pro
+  </div>
+  
+  <!-- Flex 占位，推开左右两侧 -->
+  <div class="sep"></div>
+  
+  <div class="toolbar-controls">
+    <!-- 字体选择器 (已修复苹方兼容栈) -->
+    <div class="control-group">
+      <select id="fontSelect" class="toolbar-select" title="全局阅读字体">
+        <option value="'Noto Serif SC', Georgia, serif">Noto Serif (默认衬线)</option>
+        <option value="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Helvetica Neue', Helvetica, Tahoma, Arial, 'Microsoft YaHei', sans-serif">Apple 苹方 (无衬线)</option>
+        <option value="'Microsoft YaHei', sans-serif">微软雅黑 (无衬线)</option>
+        <option value="'LXGW WenKai Lite', serif">霞鹜文楷 (手写体)</option>
+      </select>
+    </div>
+
+    <!-- 字号缩放器 -->
+    <div class="control-group">
+      <button class="font-btn" id="btnFontMinus" title="缩小字号">A-</button>
+      <div class="font-val" id="fontSizeVal">16px</div>
+      <button class="font-btn" id="btnFontPlus" title="放大字号">A+</button>
+    </div>
+
+    <!-- 标注底色 & 模式选择器 -->
+    <div class="control-group">
+      <div class="color-picker">
+        <label for="colorPicker" style="cursor:pointer">🎨</label>
+        <input type="color" id="colorPicker" value="#f1f1ef" title="标注块底色">
+      </div>
+      <select id="calloutStyleSelect" class="toolbar-select" title="标注块样式 (填充/线框)">
+        <option value="fill">填充模式</option>
+        <option value="outline">线框模式</option>
+      </select>
+    </div>
+
+    <button class="btn" id="btnClear">清空</button>
+    
+    <label class="btn btn-primary" style="margin:0; cursor:pointer;">
+      📁 上传 ZIP
+      <input type="file" id="fileInput" accept=".zip,.md" style="display: none;">
+    </label>
+    
+    <button class="btn btn-primary" id="btnPrint">🖨&nbsp; 导出 PDF</button>
+  </div>
+</div>
+
+<div class="main">
+  <!-- Editor & Dropzone -->
+  <div class="pane-editor" id="paneEditor">
+    <div class="pane-label">
+      <span>MARKDOWN 源码</span>
+    </div>
+    <textarea id="md-input" style="display: none;"></textarea>
+    <div class="char-counter" id="charCount">0 字符</div>
+  </div>
+
+  <!-- Preview -->
+  <div class="pane-preview" id="panePreview">
+    <div class="preview-page">
+      <div id="doc" class="doc"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── 核心逻辑与状态 ──────────────────────────────────────────────────
+let globalImageMap = {}; 
+let renderTimer;
+let currentFontSize = 16;
+
+// ── 初始化 CodeMirror 编辑器 ─────────────────────────────────────────
+const cmEditor = CodeMirror.fromTextArea(document.getElementById("md-input"), {
+  mode: "markdown",
+  lineWrapping: true,
+  theme: "default"
+});
+
+// EMOJI 辅助函数：判断字符串首部是否为 Emoji
+function startsWithEmoji(str) {
+  if (!str) return false;
+  const match = str.match(/^([^\w\s\x00-\x7F]+|\p{Extended_Pictographic})/u);
+  return match !== null;
+}
+function getFirstEmojiLen(str) {
+  const match = str.match(/^([^\w\s\x00-\x7F]+|\p{Extended_Pictographic})\s*/u);
+  return match ? match[0].length : 0;
+}
+
+// ── 1. MARKED.JS 配置 (代码高亮) ──────────────────────────────────
+marked.use({ gfm: true, breaks: false });
+
+marked.use({
+  renderer: {
+    code(code, infostring, escaped) {
+      const lang = (infostring || '').toLowerCase().match(/\S*/)[0];
+      let highlighted = code;
+      
+      if (lang && hljs.getLanguage(lang)) {
+        try { highlighted = hljs.highlight(code, { language: lang, ignoreIllegals: true }).value; } 
+        catch(e) { highlighted = escapeHtml(code); }
+      } else {
+        try { highlighted = hljs.highlightAuto(code).value; } 
+        catch(e) { highlighted = escapeHtml(code); }
+      }
+      
+      const label = lang ? `<span class="code-lang">${lang}</span>` : '';
+      return `<pre>${label}<code class="hljs ${lang}">${highlighted}</code></pre>\n`;
+    }
+  }
+});
+
+function escapeHtml(str) {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// ── 2. Markdown 预处理管线 (解决 <aside> 和 LaTeX 冲突) ───────────
+function processMarkdown(src) {
+  let processed = src.replace(/!\[(.*?)\]\((.*?)\)/g, (match, alt, url) => {
+    try {
+      const decoded = decodeURIComponent(url);
+      const baseName = decoded.split('/').pop();
+      if (globalImageMap[decoded]) return `![${alt}](${globalImageMap[decoded]})`;
+      if (globalImageMap[baseName]) return `![${alt}](${globalImageMap[baseName]})`;
+    } catch(e) {}
+    return match;
+  });
+  processed = processed.replace(/<img([^>]+)src=["']([^"']+)["']([^>]*)>/gi, (match, before, url, after) => {
+    try {
+      const decoded = decodeURIComponent(url);
+      const baseName = decoded.split('/').pop();
+      if (globalImageMap[decoded]) return `<img${before}src="${globalImageMap[decoded]}"${after}>`;
+      if (globalImageMap[baseName]) return `<img${before}src="${globalImageMap[baseName]}"${after}>`;
+    } catch(e) {}
+    return match;
+  });
+
+  let mathMap = {};
+  let mathCounter = 0;
+  processed = processed.replace(/\$\$([\s\S]+?)\$\$/g, (m) => {
+    let p = `%%%MATH_${mathCounter++}%%%`;
+    mathMap[p] = m;
+    return p;
+  });
+  processed = processed.replace(/(?<!\\)\$((?:\\.|[^$\n])+?)(?<!\\)\$/g, (m) => {
+    let p = `%%%MATH_${mathCounter++}%%%`;
+    mathMap[p] = m;
+    return p;
+  });
+
+  let asideMap = {};
+  let asideCounter = 0;
+  processed = processed.replace(/<aside>([\s\S]*?)<\/aside>/gi, (match, inner) => {
+    let body = inner.trim();
+    let emoji = "";
+
+    if (startsWithEmoji(body)) {
+      let len = getFirstEmojiLen(body);
+      emoji = body.slice(0, len).trim();
+      body = body.slice(len).trim();
+    } else {
+      const imgMatch = body.match(/^(<img[^>]+>)\s*/i);
+      if (imgMatch) {
+        emoji = imgMatch[1];
+        body = body.slice(imgMatch[0].length).trim();
+      }
+    }
+
+    let parsedBody = marked.parse(body);
+    let p = `%%%ASIDE_${asideCounter++}%%%`;
+    let iconHtml = emoji ? `<span class="callout-icon">${emoji}</span>` : '';
+    asideMap[p] = `<div class="callout">${iconHtml}<div class="callout-body">${parsedBody}</div></div>`;
+    return p;
+  });
+
+  let html = marked.parse(processed);
+
+  for (let p in asideMap) html = html.replace(new RegExp(p, 'g'), asideMap[p]);
+  for (let p in mathMap) html = html.replace(new RegExp(p, 'g'), mathMap[p]);
+
+  return html;
+}
+
+// ── 3. 主渲染与事件引擎 ──────────────────────────────────────────
+function render() {
+  const src = cmEditor.getValue(); 
+  const doc = document.getElementById('doc');
+  document.getElementById('charCount').textContent = src.length.toLocaleString() + ' 字符';
+
+  if (!src.trim()) {
+    doc.innerHTML = `<div class="empty">
+      <div class="empty-icon">📦</div>
+      <div class="empty-text">支持拖拽解析 Notion 导出的 .zip 文件</div>
+      <div class="empty-steps">
+        <div><b>💡 优势特性</b></div>
+        <div>1. 拖拽 ZIP 自动读取 Markdown 和本地图片</div>
+        <div>2. 完美解析 &lt;aside&gt; 标注嵌套，打印不分页</div>
+        <div>3. 代码与表格防横向截断，LaTeX 公式独立渲染</div>
+        <div>4. 顶部支持排版：可自定义字体、字号与底色模式</div>
+      </div>
+    </div>`;
+    return;
+  }
+
+  doc.innerHTML = processMarkdown(src);
+
+  renderMathInElement(doc, {
+    delimiters: [
+      {left: '$$', right: '$$', display: true},
+      {left: '\\[', right: '\\]', display: true},
+      {left: '$', right: '$', display: false},
+      {left: '\\(', right: '\\)', display: false}
+    ],
+    throwOnError: false,
+    errorColor: '#c7254e'
+  });
+
+  const h1 = doc.querySelector('h1');
+  if (h1) document.title = h1.textContent + ' — PDF Pro';
+}
+
+// ── 4. ZIP 解析引擎 (JSZip) ──────────────────────────────────────
+async function handleFile(file) {
+  if (file.name.endsWith('.zip')) {
+    try {
+      const zip = await JSZip.loadAsync(file);
+      let mdContent = "";
+      globalImageMap = {};
+
+      for (const [path, fileEntry] of Object.entries(zip.files)) {
+        if (fileEntry.dir) continue;
+        if (/\.(png|jpe?g|gif|webp|svg)$/i.test(path)) {
+          const blob = await fileEntry.async("blob");
+          const url = URL.createObjectURL(blob);
+          globalImageMap[path] = url; 
+          globalImageMap[path.split('/').pop()] = url;
+        } else if (/\.md$/i.test(path) && !mdContent) {
+          mdContent = await fileEntry.async("string");
+        }
+      }
+
+      if (mdContent) {
+        cmEditor.setValue(mdContent);
+        render();
+      } else {
+        alert('解析失败：ZIP 包中未找到 .md 文件！');
+      }
+    } catch (e) {
+      console.error(e);
+      alert('ZIP 读取失败，请确保文件格式正确。');
+    }
+  } else if (file.name.endsWith('.md')) {
+    const text = await file.text();
+    cmEditor.setValue(text);
+    render();
+  } else {
+    alert('请上传 Notion 导出的 .zip 或 .md 文件！');
+  }
+}
+
+// ── 5. 绑定交互事件 ──────────────────────────────────────────────
+
+// CodeMirror 输入防抖
+cmEditor.on('change', () => {
+  clearTimeout(renderTimer);
+  renderTimer = setTimeout(render, 300);
+});
+
+// Callout 样式切换 (填充 / 线框)
+document.getElementById('calloutStyleSelect').addEventListener('change', (e) => {
+  const doc = document.getElementById('doc');
+  if (e.target.value === 'outline') {
+    doc.classList.add('callout-outline-mode');
+  } else {
+    doc.classList.remove('callout-outline-mode');
+  }
+});
+
+// 颜色选取同步 CSS 变量
+document.getElementById('colorPicker').addEventListener('input', (e) => {
+  document.documentElement.style.setProperty('--callout', e.target.value);
+});
+
+// 侧栏切换开关
+document.getElementById('btnToggleSidebar').addEventListener('click', () => {
+  document.getElementById('paneEditor').classList.toggle('collapsed');
+});
+
+// 字号调整
+const fontSizeDisplay = document.getElementById('fontSizeVal');
+function updateFontSize(diff) {
+  currentFontSize += diff;
+  if (currentFontSize < 12) currentFontSize = 12;
+  if (currentFontSize > 26) currentFontSize = 26;
+  document.documentElement.style.setProperty('--doc-font-size', currentFontSize + 'px');
+  fontSizeDisplay.textContent = currentFontSize + 'px';
+}
+document.getElementById('btnFontMinus').addEventListener('click', () => updateFontSize(-1));
+document.getElementById('btnFontPlus').addEventListener('click', () => updateFontSize(1));
+
+// 字体类型切换
+document.getElementById('fontSelect').addEventListener('change', (e) => {
+  document.documentElement.style.setProperty('--doc-font-family', e.target.value);
+});
+
+// 按钮操作
+document.getElementById('btnPrint').addEventListener('click', () => {
+  if (!cmEditor.getValue().trim()) return alert('请先载入内容');
+  window.print();
+});
+document.getElementById('btnClear').addEventListener('click', () => {
+  cmEditor.setValue('');
+  globalImageMap = {};
+  render();
+});
+
+// 拖拽事件监听
+const paneEditor = document.getElementById('paneEditor');
+paneEditor.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  paneEditor.classList.add('drag-over');
+});
+paneEditor.addEventListener('dragleave', () => {
+  paneEditor.classList.remove('drag-over');
+});
+paneEditor.addEventListener('drop', (e) => {
+  e.preventDefault();
+  paneEditor.classList.remove('drag-over');
+  if (e.dataTransfer.files.length > 0) handleFile(e.dataTransfer.files[0]);
+});
+
+// 按钮上传事件
+document.getElementById('fileInput').addEventListener('change', (e) => {
+  if (e.target.files.length > 0) {
+    handleFile(e.target.files[0]);
+    e.target.value = ''; 
+  }
+});
+
+// 初始渲染
+render();
+</script>
+</body>
+</html>
