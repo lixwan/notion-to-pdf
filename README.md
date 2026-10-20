@@ -33,7 +33,7 @@
 
 ## 📈 流程图与宽表格
 
-- Markdown 使用 \`mermaid` 标记的代码围栏即可渲染流程图（以 SVG 输出）。示例：
+- Markdown 使用 `mermaid` 标记的代码围栏即可渲染流程图（以 SVG 输出）。示例：
 
 ```mermaid
 flowchart TD
