@@ -226,10 +226,18 @@ body {
 .callout-body > *:first-child { margin-top: 0; }
 .callout-body > *:last-child { margin-bottom: 0; }
 .doc blockquote { border-left: 3px solid #d4d3d0; padding: 2px 0 2px 18px; margin: 1em 0; color: var(--text-2); }
-.doc table { border-collapse: collapse; width: 100%; margin: 1.4em 0; font-size: 0.9em; font-family: inherit; table-layout: fixed; }
-.doc th, .doc td { border: 1px solid var(--border); padding: 10px 14px; text-align: left; word-wrap: break-word; word-break: break-word; white-space: normal; }
+/* Keep text readable without spending half the page on padding. */
+.doc table { border-collapse: collapse; width: 100%; max-width: 100%; margin: 1em 0 1.2em; font-size: 0.86em; font-family: inherit; line-height: 1.48; table-layout: auto; }
+.doc table.table-balanced { table-layout: fixed; }
+.doc th, .doc td { border: 1px solid var(--border); padding: 7px 9px; text-align: left; vertical-align: top; white-space: normal; word-break: normal; overflow-wrap: anywhere; line-break: strict; hyphens: auto; text-wrap: pretty; }
 .doc th { background: var(--bg-2); font-weight: 600; color: var(--text); }
-.doc tr:nth-child(even) td { background: #fafaf8; }
+.doc tbody tr:nth-child(even) td { background: #fafaf8; }
+.doc table.table-dense { font-size: 0.8em; line-height: 1.42; }
+.doc table.table-dense th, .doc table.table-dense td { padding: 5px 7px; }
+.doc table.table-extra-dense { font-size: 0.76em; }
+.doc table.table-extra-dense th, .doc table.table-extra-dense td { padding: 4px 5px; }
+.doc table th > p, .doc table td > p { margin-bottom: 0.3em; }
+.doc table th > p:last-child, .doc table td > p:last-child { margin-bottom: 0; }
 .doc hr { border: none; border-top: 1px solid var(--border); margin: 2.2em 0; }
 .doc a { color: var(--link); text-decoration: none; border-bottom: 1px solid rgba(3,105,161,0.2); transition: border-color 0.15s; }
 .doc a:hover { border-bottom-color: var(--link); }
@@ -307,8 +315,11 @@ body {
   .doc.callout-outline-mode .callout { background: transparent !important; border: 1px solid var(--border) !important; }
   .doc pre { background: var(--bg-2) !important; border-color: var(--border) !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; break-inside: avoid; white-space: pre-wrap !important; word-break: break-all !important; overflow-wrap: break-word !important; }
   .doc pre code { white-space: pre-wrap !important; word-break: break-all !important; overflow-wrap: break-word !important; }
-  .doc table { table-layout: fixed !important; width: 100% !important; }
-  .doc th, .doc td { word-wrap: break-word !important; word-break: break-word !important; }
+  /* Keep the adaptive columns in the PDF and repeat headers after page breaks. */
+  .doc table { width: 100% !important; break-inside: auto; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .doc table thead { display: table-header-group; }
+  .doc table tfoot { display: table-footer-group; }
+  .doc table tr { break-inside: avoid; page-break-inside: avoid; }
   .doc h1, .doc h2, .doc h3 { break-after: avoid; }
   .doc img { max-height: 800px; object-fit: contain; }
   .img-toolbar, .resize-handle { display: none !important; }
@@ -497,6 +508,69 @@ function assignHeadingIds() {
     counter.set(base, seen + 1);
     heading.id = seen ? `${base}-${seen + 1}` : base;
     heading.dataset.tocLevel = heading.tagName[1];
+  });
+}
+
+// Allocate table columns by actual cell content, not equal widths.
+// Percentages are stable between the browser preview and the print viewport.
+function optimizeTables() {
+  const context = document.createElement('canvas').getContext('2d');
+  docEl.querySelectorAll('table').forEach(table => {
+    const rows = Array.from(table.rows);
+    if (!rows.length) return;
+    const count = Math.max(...rows.map(row => Array.from(row.cells).reduce((sum, cell) => sum + cell.colSpan, 0)));
+    table.classList.toggle('table-dense', count >= 5 || rows.length >= 12);
+    table.classList.toggle('table-extra-dense', count >= 8);
+
+    // Recalculate after font changes without overriding user-authored colgroups.
+    const generated = table.querySelector(':scope > colgroup[data-table-layout]');
+    if (generated) generated.remove();
+    table.classList.remove('table-balanced');
+    if (!context || count < 2 || count > 20 || table.querySelector(':scope > colgroup') ||
+        rows.some(row => row.cells.length !== count || Array.from(row.cells).some(cell => cell.colSpan !== 1 || cell.rowSpan !== 1))) return;
+
+    const style = getComputedStyle(table);
+    const em = parseFloat(style.fontSize) || 14;
+    context.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+    const samples = Array.from({ length: count }, () => []);
+    rows.forEach(row => Array.from(row.cells).forEach((cell, index) => {
+      const text = (cell.textContent || '').replace(/\s+/g, ' ').trim();
+      const measured = text ? context.measureText(text.slice(0, 160)).width : em * 2;
+      samples[index].push(Math.min(measured, em * 30));
+    }));
+    const weights = samples.map(values => {
+      const header = values[0] || 0;
+      const sorted = values.slice().sort((a, b) => a - b);
+      const upper = sorted[Math.floor((sorted.length - 1) * 0.8)] || 0;
+      return Math.pow(Math.max(em * 4, Math.max(header, upper) + em * 1.4), 1.35);
+    });
+
+    // Reserve room for small columns; cap unusually long descriptions.
+    const minShare = Math.min(0.16, 0.70 / count);
+    const maxShare = count === 2 ? 0.74 : count === 3 ? 0.62 : count === 4 ? 0.52 : 0.44;
+    const shares = Array(count).fill(minShare);
+    let available = 1 - count * minShare;
+    let active = weights.map((_, index) => index);
+    while (active.length && available > 0.000001) {
+      const total = active.reduce((sum, index) => sum + weights[index], 0);
+      const capped = active.filter(index => shares[index] + available * weights[index] / total > maxShare);
+      if (!capped.length) {
+        active.forEach(index => { shares[index] += available * weights[index] / total; });
+        break;
+      }
+      capped.forEach(index => { available -= maxShare - shares[index]; shares[index] = maxShare; });
+      active = active.filter(index => !capped.includes(index));
+    }
+
+    const group = document.createElement('colgroup');
+    group.dataset.tableLayout = 'balanced';
+    shares.forEach(share => {
+      const col = document.createElement('col');
+      col.style.width = `${(share * 100).toFixed(3)}%`;
+      group.appendChild(col);
+    });
+    table.insertBefore(group, table.firstChild);
+    table.classList.add('table-balanced');
   });
 }
 
@@ -829,6 +903,8 @@ function render() {
     try { hljs.highlightElement(node); } catch (e) {}
   });
 
+  optimizeTables();
+
   const h1 = docEl.querySelector('h1');
   if (h1) document.title = h1.textContent + ' — PDF Pro';
 
@@ -887,6 +963,7 @@ function updateFontSize(diff) {
   if (currentFontSize < 12) currentFontSize = 12;
   if (currentFontSize > 26) currentFontSize = 26;
   document.documentElement.style.setProperty('--doc-font-size', currentFontSize + 'px');
+  optimizeTables();
   document.getElementById('fontSizeVal').textContent = currentFontSize + 'px';
 }
 
@@ -986,6 +1063,7 @@ document.getElementById('btnFontMinus').addEventListener('click', () => updateFo
 document.getElementById('btnFontPlus').addEventListener('click', () => updateFontSize(1));
 document.getElementById('fontSelect').addEventListener('change', (e) => {
   document.documentElement.style.setProperty('--doc-font-family', e.target.value);
+  optimizeTables();
 });
 function updateLineHeight(diff) {
   currentLineHeight = Math.max(1.2, Math.min(2.4, +(currentLineHeight + diff).toFixed(1)));
@@ -995,6 +1073,7 @@ function updateLineHeight(diff) {
 function updateLetterSpacing(diff) {
   currentLetterSpacing = Math.max(-0.02, Math.min(0.12, +(currentLetterSpacing + diff).toFixed(2)));
   document.documentElement.style.setProperty('--doc-letter-spacing', currentLetterSpacing.toFixed(2) + 'em');
+  optimizeTables();
   document.getElementById('letterSpacingVal').textContent = currentLetterSpacing.toFixed(2) + 'em';
 }
 function updateParagraphGap(diff) {
@@ -1018,6 +1097,7 @@ document.getElementById('btnParagraphGapPlus').addEventListener('click', () => u
 document.getElementById('paperSizeSelect').addEventListener('change', applyPageStyle);
 document.getElementById('pageMarginSelect').addEventListener('change', applyPageStyle);
 
+window.addEventListener('beforeprint', optimizeTables);
 document.getElementById('btnPrint').addEventListener('click', () => {
   if (!cmEditor.getValue().trim()) return alert('请先载入内容');
   window.print();
