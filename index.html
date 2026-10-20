@@ -324,6 +324,27 @@ body {
   .doc img { max-height: 800px; object-fit: contain; }
   .img-toolbar, .resize-handle { display: none !important; }
 }
+
+/* Wide tables: compact type, intentional wrapping, and clear numeric columns. */
+.doc table.table-dense { font-size: clamp(10px, .76em, 13px); line-height: 1.38; }
+.doc table.table-extra-dense { font-size: clamp(9.5px, .68em, 11px); line-height: 1.32; }
+.doc table.table-ultra-dense { font-size: clamp(9px, .62em, 10px); line-height: 1.28; }
+.doc table.table-ultra-dense th, .doc table.table-ultra-dense td { padding: 3px 4px; }
+.doc table th code { font-size: .92em; padding: 0; background: transparent; border: 0; color: inherit; white-space: normal; overflow-wrap: normal; word-break: normal; }
+.doc table td code { overflow-wrap: anywhere; }
+.doc table .table-number { white-space: nowrap; overflow-wrap: normal; font-variant-numeric: tabular-nums; }
+.doc .mermaid-block { max-width: 100%; margin: 1.25em auto; text-align: center; break-inside: avoid; page-break-inside: avoid; }
+.doc .mermaid-block svg { max-width: 100%; height: auto; }
+.doc .mermaid-block .mermaid { max-width: 100%; }
+/* The user's box-drawing pipeline is plain fenced text, not Mermaid. Keep its lines intact. */
+.doc pre.ascii-diagram { overflow: visible; max-width: 100%; margin: 1.15em 0; }
+.doc pre.ascii-diagram code { width: max-content; max-width: none; padding: 10px 12px; font-family: 'JetBrains Mono', 'Noto Sans Mono CJK SC', monospace; font-size: 12px; line-height: 1.4; letter-spacing: 0; white-space: pre !important; word-break: normal !important; overflow-wrap: normal !important; hyphens: none; }
+@media print {
+  .doc pre.ascii-diagram, .doc pre.ascii-diagram code { white-space: pre !important; word-break: normal !important; overflow-wrap: normal !important; }
+  .doc .mermaid-block { break-inside: avoid; page-break-inside: avoid; }
+  .doc .mermaid-block svg { max-width: 100% !important; height: auto !important; }
+}
+
 </style>
 <style id="dynamicPageStyle">
 @page { size: A4; margin: 2cm 2.2cm; }
@@ -485,6 +506,13 @@ marked.use({
   renderer: {
     code(code, infostring) {
       const lang = (infostring || '').toLowerCase().match(/\S*/)[0];
+      if (lang === 'mermaid') {
+        return `<div class="mermaid-block"><pre class="mermaid">${escapeHtml(code)}</pre></div>\n`;
+      }
+      // Box-drawing characters rely on each column staying on the original line.
+      if (/[┌┐└┘│├┤┬┴┼─▼▲►◄]/u.test(code) && code.includes('\n')) {
+        return `<pre class="ascii-diagram"><code>${escapeHtml(code)}</code></pre>\n`;
+      }
       let highlighted = code;
       if (lang && hljs.getLanguage(lang)) {
         try { highlighted = hljs.highlight(code, { language: lang, ignoreIllegals: true }).value; }
@@ -511,6 +539,64 @@ function assignHeadingIds() {
   });
 }
 
+// Share the same physical paper width between the browser preview and printing.
+function printableWidthPx() {
+  const paper = document.getElementById('paperSizeSelect')?.value || 'A4';
+  const margin = document.getElementById('pageMarginSelect')?.value || 'standard';
+  const widths = { A4: 210 / 25.4 * 96, Letter: 816, A3: 297 / 25.4 * 96 };
+  const margins = { compact: 1.5, standard: 2.2, loose: 2.8 };
+  return (widths[paper] || widths.A4) - 2 * (margins[margin] || 2.2) / 2.54 * 96;
+}
+
+// Auto-fit box-drawing diagrams without breaking the ASCII/Unicode connections.
+function fitAsciiDiagrams() {
+  const ctx = document.createElement('canvas').getContext('2d');
+  if (!ctx) return;
+  const screenWidth = docEl.getBoundingClientRect().width || printableWidthPx();
+  const maxWidth = Math.min(screenWidth, printableWidthPx());
+  docEl.querySelectorAll('pre.ascii-diagram code').forEach(code => {
+    code.style.fontSize = '12px';
+    const style = getComputedStyle(code);
+    ctx.font = `12px ${style.fontFamily}`;
+    const longest = Math.max(...code.textContent.split('\n').map(line => ctx.measureText(line).width), 1);
+    // Prevent flowchart edges from drifting because of forced line breaks.
+    code.style.fontSize = `${Math.max(4.5, Math.min(12, 12 * Math.max(100, maxWidth - 28) / longest)).toFixed(2)}px`;
+  });
+}
+
+// Mermaid is loaded only if a document contains a fenced mermaid block.
+let mermaidInstancePromise = null;
+let mermaidRenderPromise = Promise.resolve();
+let mermaidGeneration = 0;
+function loadMermaid() {
+  if (!mermaidInstancePromise) {
+    mermaidInstancePromise = import('https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.esm.min.mjs')
+      .then(({ default: engine }) => {
+        engine.initialize({ startOnLoad: false, theme: 'neutral', securityLevel: 'strict', flowchart: { useMaxWidth: true, htmlLabels: false } });
+        return engine;
+      })
+      .catch(error => { mermaidInstancePromise = null; throw error; });
+  }
+  return mermaidInstancePromise;
+}
+function renderMermaidDiagrams() {
+  const generation = ++mermaidGeneration;
+  const nodes = Array.from(docEl.querySelectorAll('.mermaid-block .mermaid'));
+  if (!nodes.length) return mermaidRenderPromise;
+  const job = async () => {
+    try {
+      const engine = await loadMermaid();
+      if (generation !== mermaidGeneration) return;
+      const active = nodes.filter(node => node.isConnected);
+      if (active.length) await engine.run({ nodes: active });
+    } catch (error) {
+      console.warn('Mermaid rendering failed; fenced source preserved:', error);
+    }
+  };
+  mermaidRenderPromise = mermaidRenderPromise.then(job, job);
+  return mermaidRenderPromise;
+}
+
 // Allocate table columns by actual cell content, not equal widths.
 // Percentages are stable between the browser preview and the print viewport.
 function optimizeTables() {
@@ -521,6 +607,27 @@ function optimizeTables() {
     const count = Math.max(...rows.map(row => Array.from(row.cells).reduce((sum, cell) => sum + cell.colSpan, 0)));
     table.classList.toggle('table-dense', count >= 5 || rows.length >= 12);
     table.classList.toggle('table-extra-dense', count >= 8);
+    table.classList.toggle('table-ultra-dense', count >= 10);
+
+    // Put optional breakpoints after underscores instead of splitting identifiers.
+    table.querySelectorAll('th code').forEach(code => {
+      if (code.querySelector('wbr')) return;
+      const text = code.textContent;
+      if (!/^[\w-]+$/.test(text) || !text.includes('_')) return;
+      const parts = text.split('_');
+      code.textContent = '';
+      parts.forEach((part, index) => {
+        if (index) {
+          code.appendChild(document.createTextNode('_'));
+          code.appendChild(document.createElement('wbr'));
+        }
+        code.appendChild(document.createTextNode(part));
+      });
+    });
+    table.querySelectorAll('tbody td').forEach(cell => {
+      cell.classList.toggle('table-number', /^(?:E\d{2}|[-+]?\d[\d.,eE+\-%]*)$/.test(cell.textContent.trim()));
+    });
+
 
     // Recalculate after font changes without overriding user-authored colgroups.
     const generated = table.querySelector(':scope > colgroup[data-table-layout]');
@@ -545,12 +652,23 @@ function optimizeTables() {
       return Math.pow(Math.max(em * 4, Math.max(header, upper) + em * 1.4), 1.35);
     });
 
-    // Reserve room for small columns; cap unusually long descriptions.
-    const minShare = Math.min(0.16, 0.70 / count);
-    const maxShare = count === 2 ? 0.74 : count === 3 ? 0.62 : count === 4 ? 0.52 : 0.44;
-    const shares = Array(count).fill(minShare);
-    let available = 1 - count * minShare;
+    // Reserve the longest meaningful header fragments and allocate the rest by content.
+    const minima = Array.from(rows[0].cells).map(cell => {
+      const code = cell.querySelector('code');
+      const cellStyle = getComputedStyle(code || cell);
+      context.font = `${cellStyle.fontWeight} ${cellStyle.fontSize} ${cellStyle.fontFamily}`;
+      const pieces = cell.textContent.trim().split(/[\s_/-]+/).filter(Boolean);
+      const longest = Math.max(...pieces.map(part => context.measureText(part).width), em * 1.8);
+      const padding = count >= 10 ? 9 : count >= 8 ? 11 : 16;
+      return Math.min(em * 15, Math.max(em * 2, longest + padding));
+    });
+    const minimumTotal = minima.reduce((sum, value) => sum + value, 0);
+    const tableWidth = Math.min(table.clientWidth || printableWidthPx(), printableWidthPx());
+    const reserved = Math.min(0.85, Math.max(0.40, minimumTotal / Math.max(1, tableWidth)));
+    const shares = minima.map(minimum => minimum / minimumTotal * reserved);
+    let available = 1 - reserved;
     let active = weights.map((_, index) => index);
+    const maxShare = count === 2 ? 0.74 : count === 3 ? 0.62 : count === 4 ? 0.52 : count >= 8 ? 0.38 : 0.44;
     while (active.length && available > 0.000001) {
       const total = active.reduce((sum, index) => sum + weights[index], 0);
       const capped = active.filter(index => shares[index] + available * weights[index] / total > maxShare);
@@ -904,6 +1022,8 @@ function render() {
   });
 
   optimizeTables();
+  fitAsciiDiagrams();
+  renderMermaidDiagrams();
 
   const h1 = docEl.querySelector('h1');
   if (h1) document.title = h1.textContent + ' — PDF Pro';
@@ -977,6 +1097,8 @@ function applyPageStyle() {
   document.documentElement.style.setProperty('--page-padding-top', margin.screenTop);
   document.documentElement.style.setProperty('--page-padding-bottom', margin.screenBottom);
   document.getElementById('dynamicPageStyle').textContent = `@page { size: ${size.page}; margin: ${margin.css}; }`;
+  optimizeTables();
+  fitAsciiDiagrams();
 }
 
 function syncEditorToPreview() {
@@ -1097,9 +1219,14 @@ document.getElementById('btnParagraphGapPlus').addEventListener('click', () => u
 document.getElementById('paperSizeSelect').addEventListener('change', applyPageStyle);
 document.getElementById('pageMarginSelect').addEventListener('change', applyPageStyle);
 
-window.addEventListener('beforeprint', optimizeTables);
-document.getElementById('btnPrint').addEventListener('click', () => {
+window.addEventListener('beforeprint', () => { optimizeTables(); fitAsciiDiagrams(); });
+document.getElementById('btnPrint').addEventListener('click', async () => {
   if (!cmEditor.getValue().trim()) return alert('请先载入内容');
+  // Wait for SVG diagrams and fonts before the PDF print snapshot.
+  await Promise.race([renderMermaidDiagrams(), new Promise(resolve => setTimeout(resolve, 8000))]);
+  await Promise.race([document.fonts.ready, new Promise(resolve => setTimeout(resolve, 2000))]);
+  optimizeTables();
+  fitAsciiDiagrams();
   window.print();
 });
 document.getElementById('btnClear').addEventListener('click', () => {
