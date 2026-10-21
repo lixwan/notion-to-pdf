@@ -230,7 +230,7 @@ body {
 /* Keep text readable without spending half the page on padding. */
 .doc table { border-collapse: collapse; width: 100%; max-width: 100%; margin: 1.2em 0 1.5em; font-size: 0.88em; font-family: inherit; line-height: 1.45; table-layout: auto; border: 1px solid var(--border); }
 .doc table.table-balanced { table-layout: fixed; }
-.doc th, .doc td { border: 1px solid var(--border); padding: 7px 9px; text-align: left; vertical-align: middle; white-space: normal; word-break: normal; overflow-wrap: break-word; line-break: auto; hyphens: manual; }
+.doc th, .doc td { border: 1px solid var(--border); padding: 7px 9px; text-align: left; vertical-align: middle; white-space: normal; word-break: normal; overflow-wrap: break-word; line-break: auto; hyphens: manual; overflow: hidden; }
 .doc th { background: var(--bg-2); font-weight: 600; color: var(--text); border-bottom: 2px solid #dcdad5; }
 .doc tbody tr:nth-child(even) td { background: #faf9f6; }
 .doc tbody tr:hover td { background: #f4f3ef; }
@@ -358,7 +358,7 @@ body {
 }
 
 /* Wide tables: compact type, intentional wrapping, and clear numeric columns. */
-.doc table th code { font-size: .92em; padding: 0; background: transparent; border: 0; color: inherit; white-space: normal; overflow-wrap: normal; word-break: normal; }
+.doc table th code { font-size: .92em; padding: 0; background: transparent; border: 0; color: inherit; white-space: normal; overflow-wrap: break-word; word-break: normal; }
 .doc table td code { overflow-wrap: break-word; }
 .doc table .table-number { white-space: nowrap; overflow-wrap: normal; font-variant-numeric: tabular-nums; }
 .doc .mermaid-block { max-width: 100%; margin: 1.25em auto; text-align: center; break-inside: avoid; page-break-inside: avoid; }
@@ -704,10 +704,11 @@ function optimizeTables() {
 
     const style = getComputedStyle(table);
     const em = parseFloat(style.fontSize) || (count >= 10 ? 9 : count >= 8 ? 10.5 : 13);
-    context.font = `${style.fontWeight || 'normal'} ${em}px ${style.fontFamily || 'sans-serif'}`;
+    const normalFont = `${style.fontWeight || 'normal'} ${em}px ${style.fontFamily || 'sans-serif'}`;
+    const codeFont = `${style.fontWeight || 'normal'} ${em}px 'JetBrains Mono', monospace`;
 
     // Measure minimum width needed by each column so atomic words never wrap mid-word
-    const padding = count >= 10 ? 7 : count >= 8 ? 9 : 14;
+    const padding = count >= 10 ? 8 : count >= 8 ? 10 : 14;
     const minima = Array.from({ length: count }, () => em * 2);
     const samples = Array.from({ length: count }, () => []);
 
@@ -716,16 +717,39 @@ function optimizeTables() {
         const text = (cell.textContent || '').replace(/\s+/g, ' ').trim();
         if (!text) return;
 
-        // Split text by whitespace, slash, hyphen to find longest atomic token
-        const tokens = text.split(/[\s/-]+/).filter(Boolean);
-        const maxTokenWidth = tokens.length ? Math.max(...tokens.map(tok => context.measureText(tok).width)) : 0;
+        const isCode = !!cell.querySelector('code');
+        context.font = isCode ? codeFont : normalFont;
+
+        // Extract atomic tokens:
+        // CJK characters can naturally break anywhere, while English words, numbers, and identifiers cannot.
+        // Match English/numbers/identifiers OR 1-2 CJK characters
+        const tokenRegex = /([a-zA-Z0-9_\-\.%]+|[\u4e00-\u9fa5]{1,2}|[^\s])/g;
+        let m;
+        let maxTokenWidth = 0;
+        while ((m = tokenRegex.exec(text)) !== null) {
+          let tok = m[1];
+          if (tok.includes('_')) {
+            tok.split('_').forEach(sub => {
+              if (sub) {
+                const w = context.measureText(sub + '_').width;
+                if (w > maxTokenWidth) maxTokenWidth = w;
+              }
+            });
+          } else {
+            const w = context.measureText(tok).width;
+            if (w > maxTokenWidth) maxTokenWidth = w;
+          }
+        }
+
         minima[index] = Math.max(minima[index], maxTokenWidth + padding);
 
+        // Overall cell content width (for weighting content-heavy columns like descriptions)
         const measured = context.measureText(text.slice(0, 160)).width;
         samples[index].push(Math.min(measured, em * 30));
       });
     });
 
+    context.font = normalFont;
     const weights = samples.map(values => {
       if (!values.length) return em * 4;
       const sorted = values.slice().sort((a, b) => a - b);
