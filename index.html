@@ -50,6 +50,7 @@
   --editor-width: 42%;
   --toc-width: 240px;
   --menu-width: 248px;
+  --print-img-max-height: 420px;
 }
 html, body { height: 100%; overflow: hidden; }
 body {
@@ -227,15 +228,22 @@ body {
 .callout-body > *:last-child { margin-bottom: 0; }
 .doc blockquote { border-left: 3px solid #d4d3d0; padding: 2px 0 2px 18px; margin: 1em 0; color: var(--text-2); }
 /* Keep text readable without spending half the page on padding. */
-.doc table { border-collapse: collapse; width: 100%; max-width: 100%; margin: 1em 0 1.2em; font-size: 0.86em; font-family: inherit; line-height: 1.48; table-layout: auto; }
+.doc table { border-collapse: collapse; width: 100%; max-width: 100%; margin: 1.2em 0 1.5em; font-size: 0.88em; font-family: inherit; line-height: 1.45; table-layout: auto; border: 1px solid var(--border); }
 .doc table.table-balanced { table-layout: fixed; }
-.doc th, .doc td { border: 1px solid var(--border); padding: 7px 9px; text-align: left; vertical-align: top; white-space: normal; word-break: normal; overflow-wrap: anywhere; line-break: strict; hyphens: auto; text-wrap: pretty; }
-.doc th { background: var(--bg-2); font-weight: 600; color: var(--text); }
-.doc tbody tr:nth-child(even) td { background: #fafaf8; }
-.doc table.table-dense { font-size: 0.8em; line-height: 1.42; }
-.doc table.table-dense th, .doc table.table-dense td { padding: 5px 7px; }
-.doc table.table-extra-dense { font-size: 0.76em; }
+.doc th, .doc td { border: 1px solid var(--border); padding: 7px 9px; text-align: left; vertical-align: middle; white-space: normal; word-break: normal; overflow-wrap: break-word; line-break: auto; hyphens: manual; }
+.doc th { background: var(--bg-2); font-weight: 600; color: var(--text); border-bottom: 2px solid #dcdad5; }
+.doc tbody tr:nth-child(even) td { background: #faf9f6; }
+.doc tbody tr:hover td { background: #f4f3ef; }
+.doc th[align="center"], .doc td[align="center"] { text-align: center; }
+.doc th[align="right"], .doc td[align="right"] { text-align: right; }
+.doc th[align="left"], .doc td[align="left"] { text-align: left; }
+.doc table.table-dense { font-size: clamp(9.5px, .74em, 12.5px); line-height: 1.35; }
+.doc table.table-dense th, .doc table.table-dense td { padding: 5px 6px; }
+.doc table.table-extra-dense { font-size: clamp(8.5px, .66em, 11px); line-height: 1.3; }
 .doc table.table-extra-dense th, .doc table.table-extra-dense td { padding: 4px 5px; }
+.doc table.table-ultra-dense { font-size: clamp(8px, .58em, 9.5px); line-height: 1.25; }
+.doc table.table-ultra-dense th, .doc table.table-ultra-dense td { padding: 3px 4px; }
+.th-sub { display: block; font-size: 0.88em; font-weight: 400; color: var(--text-2); white-space: nowrap; line-height: 1.2; margin-top: 2px; }
 .doc table th > p, .doc table td > p { margin-bottom: 0.3em; }
 .doc table th > p:last-child, .doc table td > p:last-child { margin-bottom: 0; }
 .doc hr { border: none; border-top: 1px solid var(--border); margin: 2.2em 0; }
@@ -246,28 +254,40 @@ body {
 .hidden { display: none !important; }
 
 /* ======== 图片交互控制与排版样式 ======== */
-.doc .img-container { width: 100%; margin: 1.2em 0; }
+.doc .img-container { width: 100%; margin: 1.2em 0; break-inside: avoid; page-break-inside: avoid; }
 .doc .img-container-left { text-align: left; }
 .doc .img-container-center { text-align: center; }
 .doc .img-container-right { text-align: right; }
 
 .doc .img-wrapper { position: relative; display: inline-block; max-width: 100%; }
-.doc .img-wrapper img { margin: 0 !important; display: block; max-width: 100%; width: auto; }
+.doc .img-wrapper img { margin: 0 !important; display: block; max-width: 100%; width: auto; max-height: 520px; object-fit: contain; }
+
+/* 表格单元格内的并排图片样式优化：紧凑、居中、不撑爆表格 */
+.doc table td img, .doc table td .table-img {
+  max-width: 100% !important;
+  height: auto !important;
+  max-height: 220px !important;
+  object-fit: contain !important;
+  display: block !important;
+  margin: 3px auto !important;
+  border-radius: var(--radius-sm);
+}
 
 .img-toolbar {
-  position: absolute; top: 8px; right: 8px; background: rgba(255,255,255,0.9);
+  position: absolute; top: 8px; right: 8px; background: rgba(255,255,255,0.95);
   border: 1px solid var(--border); border-radius: var(--radius-sm);
   display: flex; gap: 4px; padding: 4px; opacity: 0; transition: opacity 0.2s;
-  box-shadow: var(--shadow); z-index: 10;
+  box-shadow: var(--shadow); z-index: 10; font-size: 11px;
 }
 .doc .img-wrapper:hover .img-toolbar { opacity: 1; }
 .img-toolbar button {
-  background: transparent; border: none; cursor: pointer; padding: 4px;
+  background: transparent; border: none; cursor: pointer; padding: 3px 6px;
   border-radius: 4px; display: flex; align-items: center; justify-content: center;
-  color: var(--text-2); transition: all 0.2s;
+  color: var(--text-2); transition: all 0.2s; font-size: 11px; font-weight: 500;
 }
 .img-toolbar button:hover { background: var(--bg-3); color: var(--text); }
-.img-toolbar svg { width: 16px; height: 16px; }
+.img-toolbar svg { width: 14px; height: 14px; }
+.img-toolbar .tb-sep { width: 1px; height: 14px; background: var(--border); margin: 0 2px; align-self: center; }
 
 .resize-handle {
   position: absolute; width: 10px; height: 10px; background: #fff; border: 1.5px solid var(--link);
@@ -311,7 +331,7 @@ body {
   .main { background: #fff; gap: 0; display: block; border: none; }
   .pane-preview, .preview-scroll { overflow: visible; width: 100%; background: #fff; display: block; }
   .preview-page { max-width: 100%; padding: 0; margin: 0; }
-  .doc .callout { background: var(--callout) !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .doc .callout { background: var(--callout) !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; break-inside: avoid; page-break-inside: avoid; }
   .doc.callout-outline-mode .callout { background: transparent !important; border: 1px solid var(--border) !important; }
   .doc pre { background: var(--bg-2) !important; border-color: var(--border) !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; break-inside: avoid; white-space: pre-wrap !important; word-break: break-all !important; overflow-wrap: break-word !important; }
   .doc pre code { white-space: pre-wrap !important; word-break: break-all !important; overflow-wrap: break-word !important; }
@@ -321,17 +341,25 @@ body {
   .doc table tfoot { display: table-footer-group; }
   .doc table tr { break-inside: avoid; page-break-inside: avoid; }
   .doc h1, .doc h2, .doc h3 { break-after: avoid; }
-  .doc img { max-height: 800px; object-fit: contain; }
+  .doc .img-container { margin: 0.8em 0; break-inside: avoid; page-break-inside: avoid; text-align: center; }
+  .doc .img-wrapper { display: inline-block; max-width: 100%; }
+  .doc img {
+    max-height: var(--print-img-max-height, 420px) !important;
+    width: auto !important;
+    max-width: 100% !important;
+    object-fit: contain;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .doc table td img {
+    max-height: 220px !important;
+  }
   .img-toolbar, .resize-handle { display: none !important; }
 }
 
 /* Wide tables: compact type, intentional wrapping, and clear numeric columns. */
-.doc table.table-dense { font-size: clamp(10px, .76em, 13px); line-height: 1.38; }
-.doc table.table-extra-dense { font-size: clamp(9.5px, .68em, 11px); line-height: 1.32; }
-.doc table.table-ultra-dense { font-size: clamp(9px, .62em, 10px); line-height: 1.28; }
-.doc table.table-ultra-dense th, .doc table.table-ultra-dense td { padding: 3px 4px; }
 .doc table th code { font-size: .92em; padding: 0; background: transparent; border: 0; color: inherit; white-space: normal; overflow-wrap: normal; word-break: normal; }
-.doc table td code { overflow-wrap: anywhere; }
+.doc table td code { overflow-wrap: break-word; }
 .doc table .table-number { white-space: nowrap; overflow-wrap: normal; font-variant-numeric: tabular-nums; }
 .doc .mermaid-block { max-width: 100%; margin: 1.25em auto; text-align: center; break-inside: avoid; page-break-inside: avoid; }
 .doc .mermaid-block svg { max-width: 100%; height: auto; }
@@ -401,6 +429,10 @@ body {
           <div class="menu-label">标注块</div>
           <div class="menu-row"><span class="row-title">底色</span><div class="color-picker"><label for="colorPicker" style="cursor:pointer">🎨</label><input type="color" id="colorPicker" value="#f1f1ef" title="标注块底色"></div></div>
           <div class="menu-row"><span class="row-title">样式</span><select id="calloutStyleSelect" class="toolbar-select"><option value="fill">填充</option><option value="outline">线框</option></select></div>
+        </div>
+        <div class="menu-section">
+          <div class="menu-label">图片排版</div>
+          <div class="menu-row"><span class="row-title">打印图片限高</span><select id="imgMaxHeightSelect" class="toolbar-select"><option value="320px">紧凑 (320px)</option><option value="420px" selected>适中 (420px·防大空白)</option><option value="560px">宽松 (560px)</option><option value="none">无限制 (原始高)</option></select></div>
         </div>
       </div>
     </div>
@@ -501,13 +533,26 @@ function unindent(str) {
   return str;
 }
 
+// Sanitize mermaid code to prevent syntax errors and Mermaid v11 markdown list parsing bug
+function sanitizeMermaidSource(code) {
+  if (!code) return '';
+  // Fix Mermaid v11 bug: "Unsupported markdown: list"
+  // When text inside quotes/delimiters starts with a number+dot (e.g. "1. ") or bullets (- / * / +),
+  // Mermaid's internal markdown parser misidentifies it as a list and throws "Unsupported markdown: list".
+  // Prepending a zero-width space (\u200B) prevents markdown list recognition while rendering invisibly.
+  return code
+    .replace(/(["'\[\(\{>|]\s*|\n\s*|<br\s*\/?>\s*)([0-9]+)\.\s+/gi, '$1\u200B$2. ')
+    .replace(/(["'\[\(\{>|]\s*|\n\s*|<br\s*\/?>\s*)([-*+])\s+/gi, '$1\u200B$2 ');
+}
+
 marked.use({ gfm: true, breaks: false });
 marked.use({
   renderer: {
     code(code, infostring) {
       const lang = (infostring || '').toLowerCase().match(/\S*/)[0];
       if (lang === 'mermaid') {
-        return `<div class="mermaid-block"><pre class="mermaid">${escapeHtml(code)}</pre></div>\n`;
+        const sanitized = sanitizeMermaidSource(code);
+        return `<div class="mermaid-block"><pre class="mermaid">${escapeHtml(sanitized)}</pre></div>\n`;
       }
       // Box-drawing characters rely on each column staying on the original line.
       if (/[┌┐└┘│├┤┬┴┼─▼▲►◄]/u.test(code) && code.includes('\n')) {
@@ -572,7 +617,17 @@ function loadMermaid() {
   if (!mermaidInstancePromise) {
     mermaidInstancePromise = import('https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.esm.min.mjs')
       .then(({ default: engine }) => {
-        engine.initialize({ startOnLoad: false, theme: 'neutral', securityLevel: 'strict', flowchart: { useMaxWidth: true, htmlLabels: false } });
+        engine.initialize({
+          startOnLoad: false,
+          theme: 'neutral',
+          securityLevel: 'loose',
+          fontFamily: "'Noto Sans SC', -apple-system, BlinkMacSystemFont, sans-serif",
+          flowchart: {
+            useMaxWidth: true,
+            htmlLabels: true,
+            curve: 'basis'
+          }
+        });
         return engine;
       })
       .catch(error => { mermaidInstancePromise = null; throw error; });
@@ -609,6 +664,17 @@ function optimizeTables() {
     table.classList.toggle('table-extra-dense', count >= 8);
     table.classList.toggle('table-ultra-dense', count >= 10);
 
+    // Format headers with Chinese + English in parentheses into elegant 2-line header
+    // e.g. "地理 (geography)" -> "地理<span class="th-sub">(geography)</span>"
+    table.querySelectorAll('th').forEach(th => {
+      if (th.querySelector('.th-sub') || th.querySelector('code')) return;
+      const raw = th.textContent.trim();
+      const match = raw.match(/^([\u4e00-\u9fa5\w/]+)\s+\(([^)]+)\)$/);
+      if (match) {
+        th.innerHTML = `${escapeHtml(match[1])}<span class="th-sub">(${escapeHtml(match[2])})</span>`;
+      }
+    });
+
     // Put optional breakpoints after underscores instead of splitting identifiers.
     table.querySelectorAll('th code').forEach(code => {
       if (code.querySelector('wbr')) return;
@@ -624,10 +690,10 @@ function optimizeTables() {
         code.appendChild(document.createTextNode(part));
       });
     });
+
     table.querySelectorAll('tbody td').forEach(cell => {
       cell.classList.toggle('table-number', /^(?:E\d{2}|[-+]?\d[\d.,eE+\-%]*)$/.test(cell.textContent.trim()));
     });
-
 
     // Recalculate after font changes without overriding user-authored colgroups.
     const generated = table.querySelector(':scope > colgroup[data-table-layout]');
@@ -637,47 +703,48 @@ function optimizeTables() {
         rows.some(row => row.cells.length !== count || Array.from(row.cells).some(cell => cell.colSpan !== 1 || cell.rowSpan !== 1))) return;
 
     const style = getComputedStyle(table);
-    const em = parseFloat(style.fontSize) || 14;
-    context.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+    const em = parseFloat(style.fontSize) || (count >= 10 ? 9 : count >= 8 ? 10.5 : 13);
+    context.font = `${style.fontWeight || 'normal'} ${em}px ${style.fontFamily || 'sans-serif'}`;
+
+    // Measure minimum width needed by each column so atomic words never wrap mid-word
+    const padding = count >= 10 ? 7 : count >= 8 ? 9 : 14;
+    const minima = Array.from({ length: count }, () => em * 2);
     const samples = Array.from({ length: count }, () => []);
-    rows.forEach(row => Array.from(row.cells).forEach((cell, index) => {
-      const text = (cell.textContent || '').replace(/\s+/g, ' ').trim();
-      const measured = text ? context.measureText(text.slice(0, 160)).width : em * 2;
-      samples[index].push(Math.min(measured, em * 30));
-    }));
-    const weights = samples.map(values => {
-      const header = values[0] || 0;
-      const sorted = values.slice().sort((a, b) => a - b);
-      const upper = sorted[Math.floor((sorted.length - 1) * 0.8)] || 0;
-      return Math.pow(Math.max(em * 4, Math.max(header, upper) + em * 1.4), 1.35);
+
+    rows.forEach(row => {
+      Array.from(row.cells).forEach((cell, index) => {
+        const text = (cell.textContent || '').replace(/\s+/g, ' ').trim();
+        if (!text) return;
+
+        // Split text by whitespace, slash, hyphen to find longest atomic token
+        const tokens = text.split(/[\s/-]+/).filter(Boolean);
+        const maxTokenWidth = tokens.length ? Math.max(...tokens.map(tok => context.measureText(tok).width)) : 0;
+        minima[index] = Math.max(minima[index], maxTokenWidth + padding);
+
+        const measured = context.measureText(text.slice(0, 160)).width;
+        samples[index].push(Math.min(measured, em * 30));
+      });
     });
 
-    // Reserve the longest meaningful header fragments and allocate the rest by content.
-    const minima = Array.from(rows[0].cells).map(cell => {
-      const code = cell.querySelector('code');
-      const cellStyle = getComputedStyle(code || cell);
-      context.font = `${cellStyle.fontWeight} ${cellStyle.fontSize} ${cellStyle.fontFamily}`;
-      const pieces = cell.textContent.trim().split(/[\s_/-]+/).filter(Boolean);
-      const longest = Math.max(...pieces.map(part => context.measureText(part).width), em * 1.8);
-      const padding = count >= 10 ? 9 : count >= 8 ? 11 : 16;
-      return Math.min(em * 15, Math.max(em * 2, longest + padding));
+    const weights = samples.map(values => {
+      if (!values.length) return em * 4;
+      const sorted = values.slice().sort((a, b) => a - b);
+      const upper = sorted[Math.floor((sorted.length - 1) * 0.8)] || values[0] || em * 4;
+      return Math.max(em * 2, upper);
     });
-    const minimumTotal = minima.reduce((sum, value) => sum + value, 0);
+
     const tableWidth = Math.min(table.clientWidth || printableWidthPx(), printableWidthPx());
-    const reserved = Math.min(0.85, Math.max(0.40, minimumTotal / Math.max(1, tableWidth)));
-    const shares = minima.map(minimum => minimum / minimumTotal * reserved);
-    let available = 1 - reserved;
-    let active = weights.map((_, index) => index);
-    const maxShare = count === 2 ? 0.74 : count === 3 ? 0.62 : count === 4 ? 0.52 : count >= 8 ? 0.38 : 0.44;
-    while (active.length && available > 0.000001) {
-      const total = active.reduce((sum, index) => sum + weights[index], 0);
-      const capped = active.filter(index => shares[index] + available * weights[index] / total > maxShare);
-      if (!capped.length) {
-        active.forEach(index => { shares[index] += available * weights[index] / total; });
-        break;
-      }
-      capped.forEach(index => { available -= maxShare - shares[index]; shares[index] = maxShare; });
-      active = active.filter(index => !capped.includes(index));
+    const totalMin = minima.reduce((sum, val) => sum + val, 0);
+
+    let shares;
+    if (totalMin <= tableWidth) {
+      const available = tableWidth - totalMin;
+      const totalWeight = weights.reduce((sum, val) => sum + val, 0) || 1;
+      const widths = minima.map((min, idx) => min + available * (weights[idx] / totalWeight));
+      shares = widths.map(w => w / tableWidth);
+    } else {
+      // If table is wider than printable page, scale down minima proportionally
+      shares = minima.map(min => min / totalMin);
     }
 
     const group = document.createElement('colgroup');
@@ -901,15 +968,30 @@ function updateTocActiveByScroll() {
   setActiveToc(current.id);
 }
 
+let savedImageSettings = {};
+
 function initImageControls() {
   const images = docEl.querySelectorAll('img');
   images.forEach(img => {
+    // If image is inside a table cell, keep it clean and compact without heavy outer container
+    if (img.closest('table')) {
+      img.classList.add('table-img');
+      return;
+    }
+
     if (img.parentElement && img.parentElement.classList.contains('img-wrapper')) return;
 
+    const imgSrc = img.getAttribute('src') || '';
+    const saved = savedImageSettings[imgSrc] || {};
+
     const container = document.createElement('div');
-    container.className = 'img-container img-container-left'; 
+    container.className = `img-container img-container-${saved.align || 'center'}`; 
     const wrapper = document.createElement('div');
     wrapper.className = 'img-wrapper';
+
+    if (saved.width) {
+      img.style.width = saved.width;
+    }
 
     img.parentNode.insertBefore(container, img);
     container.appendChild(wrapper);
@@ -918,18 +1000,40 @@ function initImageControls() {
     const toolbar = document.createElement('div');
     toolbar.className = 'img-toolbar';
     toolbar.innerHTML = `
-      <button data-align="left" title="左对齐"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="12" x2="15" y2="12"></line><line x1="3" y1="18" x2="19" y2="18"></line></svg></button>
-      <button data-align="center" title="居中对齐"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"></line><line x1="7" y1="12" x2="17" y2="12"></line><line x1="5" y1="18" x2="19" y2="18"></line></svg></button>
-      <button data-align="right" title="右对齐"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"></line><line x1="9" y1="12" x2="21" y2="12"></line><line x1="5" y1="18" x2="21" y2="18"></line></svg></button>
+      <button data-align="left" title="靠左"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="12" x2="15" y2="12"></line><line x1="3" y1="18" x2="19" y2="18"></line></svg></button>
+      <button data-align="center" title="居中"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"></line><line x1="7" y1="12" x2="17" y2="12"></line><line x1="5" y1="18" x2="19" y2="18"></line></svg></button>
+      <button data-align="right" title="靠右"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"></line><line x1="9" y1="12" x2="21" y2="12"></line><line x1="5" y1="18" x2="21" y2="18"></line></svg></button>
+      <div class="tb-sep"></div>
+      <button data-size="50%" title="50% 宽度">50%</button>
+      <button data-size="75%" title="75% 宽度">75%</button>
+      <button data-size="100%" title="100% 宽度">100%</button>
+      <button data-size="auto" title="自适应/还原">适应</button>
     `;
     wrapper.appendChild(toolbar);
 
-    toolbar.querySelectorAll('button').forEach(btn => {
+    toolbar.querySelectorAll('button[data-align]').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
         const align = btn.dataset.align;
         container.className = `img-container img-container-${align}`;
+        savedImageSettings[imgSrc] = { ...(savedImageSettings[imgSrc] || {}), align };
+      });
+    });
+
+    toolbar.querySelectorAll('button[data-size]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const size = btn.dataset.size;
+        if (size === 'auto') {
+          img.style.width = 'auto';
+          img.style.maxWidth = '100%';
+          savedImageSettings[imgSrc] = { ...(savedImageSettings[imgSrc] || {}), width: 'auto' };
+        } else {
+          img.style.width = size;
+          savedImageSettings[imgSrc] = { ...(savedImageSettings[imgSrc] || {}), width: size };
+        }
       });
     });
 
@@ -959,6 +1063,7 @@ function initImageControls() {
 
           if (newWidth > 50) { 
             img.style.width = newWidth + 'px';
+            savedImageSettings[imgSrc] = { ...(savedImageSettings[imgSrc] || {}), width: newWidth + 'px' };
           }
         }
 
@@ -1167,6 +1272,13 @@ document.getElementById('calloutStyleSelect').addEventListener('change', (e) => 
   if (e.target.value === 'outline') docEl.classList.add('callout-outline-mode');
   else docEl.classList.remove('callout-outline-mode');
 });
+const imgMaxHeightSelect = document.getElementById('imgMaxHeightSelect');
+if (imgMaxHeightSelect) {
+  imgMaxHeightSelect.addEventListener('change', (e) => {
+    const val = e.target.value;
+    document.documentElement.style.setProperty('--print-img-max-height', val === 'none' ? 'none' : val);
+  });
+}
 document.getElementById('colorPicker').addEventListener('input', (e) => {
   document.documentElement.style.setProperty('--callout', e.target.value);
 });
